@@ -13,7 +13,7 @@ class TTSService {
     if (_isInitialized) return;
     
     await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setSpeechRate(1);  // Slower for elderly users
+    await _flutterTts.setSpeechRate(0.4);  // Slower for elderly users
     await _flutterTts.setVolume(1.0);       // Maximum volume
     await _flutterTts.setPitch(1.0);
     

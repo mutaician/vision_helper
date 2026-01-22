@@ -3,6 +3,7 @@ import 'package:ultralytics_yolo/ultralytics_yolo.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/tts_service.dart';
 import '../services/detection_logger.dart';
+import 'log_viewer_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -27,6 +28,13 @@ class _CameraScreenState extends State<CameraScreen> {
     _initializeApp();
   }
 
+  void _navigateToLogViewer() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const LogViewerScreen()),
+  );
+}
+
   Future<void> _initializeApp() async {
     await _checkPermissions();
     await _ttsService.initialize();
@@ -50,6 +58,15 @@ class _CameraScreenState extends State<CameraScreen> {
       await _ttsService.speak("Camera permission is needed to help you see objects");
     }
   }
+
+  Future<void> _describeScene() async {
+  // Placeholder for Gemini Nano integration
+  await _ttsService.speak(
+    "Scene description feature coming soon. "
+    "Currently I can see ${_currentDetections.length} objects: "
+    "${_currentDetections.map((d) => d.className).toSet().join(', ')}"
+  );
+}
 
   void _onDetectionResult(List<YOLOResult> results) {
     setState(() {
@@ -168,209 +185,160 @@ class _CameraScreenState extends State<CameraScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
+    backgroundColor: Colors.black,
+    body: SafeArea(
+      child: Column(
         children: [
-          // YOLO Camera View - THE MAIN COMPONENT
-          YOLOView(
-            modelPath: 'yolo11n',  // Matches the .tflite filename
-            task: YOLOTask.detect,
-            onResult: _onDetectionResult,
-          ),
-          
-          // Top Info Bar
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: EdgeInsets.only(
-                top: MediaQuery.of(context).padding.top + 10,
-                left: 20,
-                right: 20,
-                bottom: 10,
-              ),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.7),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "Vision Helper",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+          // ===== TOP BAR =====
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Colors.black,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Vision Helper",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
                   ),
-                  // Detection count
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12, 
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      "${_currentDetections.length} objects",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
+                ),
+                Row(
+                  children: [
+                    // Detection count badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        "${_currentDetections.length} objects",
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    // Settings/Log button
+                    IconButton(
+                      onPressed: () => _navigateToLogViewer(),
+                      icon: const Icon(Icons.history, color: Colors.white, size: 28),
+                      tooltip: 'View Detection History',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          // ===== CAMERA VIEW (constrained, not fullscreen) =====
+          Expanded(
+            flex: 3,  // Takes 3/5 of available space
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.withOpacity(0.5), width: 2),
+              ),
+              clipBehavior: Clip.hardEdge,
+              child: YOLOView(
+                modelPath: 'yolov8s-worldv2_float32',
+                task: YOLOTask.detect,
+                onResult: _onDetectionResult,
+              ),
+            ),
+          ),
+          
+          // ===== DETECTION RESULTS PANEL =====
+          Expanded(
+            flex: 2,  // Takes 2/5 of available space
+            child: Container(
+              margin: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Detected Objects:",
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _currentDetections.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "Point camera at objects...",
+                              style: TextStyle(color: Colors.white54, fontSize: 16),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _currentDetections.length,
+                            itemBuilder: (context, index) {
+                              final detection = _currentDetections[index];
+                              final confidence = (detection.confidence * 100).toInt();
+                              return _DetectionTile(
+                                objectName: detection.className,
+                                confidence: confidence,
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
             ),
           ),
           
-          // Detection List (Bottom Panel)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: 200),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.9),
-                    Colors.black.withOpacity(0.7),
-                    Colors.transparent,
-                  ],
+          // ===== CONTROL BUTTONS =====
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: Colors.black,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Speech Toggle
+                _ControlButton(
+                  icon: _isSpeechEnabled ? Icons.volume_up : Icons.volume_off,
+                  label: _isSpeechEnabled ? "Sound ON" : "Sound OFF",
+                  color: _isSpeechEnabled ? Colors.green : Colors.red,
+                  onPressed: () {
+                    setState(() => _isSpeechEnabled = !_isSpeechEnabled);
+                    _ttsService.speak(
+                      _isSpeechEnabled 
+                        ? "Voice announcements enabled" 
+                        : "Voice announcements disabled"
+                    );
+                  },
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_currentDetections.isNotEmpty)
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        itemCount: _currentDetections.length,
-                        itemBuilder: (context, index) {
-                          final detection = _currentDetections[index];
-                          final confidence = (detection.confidence * 100).toInt();
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                // Confidence indicator
-                                Container(
-                                  width: 60,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(4),
-                                    color: Colors.grey[800],
-                                  ),
-                                  child: FractionallySizedBox(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: detection.confidence,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(4),
-                                        color: _getConfidenceColor(confidence),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    detection.className.toUpperCase(),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  "$confidence%",
-                                  style: TextStyle(
-                                    color: _getConfidenceColor(confidence),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  
-                  // Control Buttons
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
-                      bottom: MediaQuery.of(context).padding.bottom + 16,
-                      top: 8,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // Toggle Speech Button
-                        _ControlButton(
-                          icon: _isSpeechEnabled 
-                            ? Icons.volume_up 
-                            : Icons.volume_off,
-                          label: _isSpeechEnabled ? "Sound ON" : "Sound OFF",
-                          color: _isSpeechEnabled ? Colors.green : Colors.red,
-                          onPressed: () {
-                            setState(() {
-                              _isSpeechEnabled = !_isSpeechEnabled;
-                            });
-                            _ttsService.speak(
-                              _isSpeechEnabled 
-                                ? "Voice announcements enabled" 
-                                : "Voice announcements disabled"
-                            );
-                          },
-                        ),
-                        
-                        // Save Log Button
-                        _ControlButton(
-                          icon: Icons.save,
-                          label: "Save Log",
-                          color: Colors.blue,
-                          onPressed: _saveDetectionLog,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                // Save Log
+                _ControlButton(
+                  icon: Icons.save_alt,
+                  label: "Save Log",
+                  color: Colors.blue,
+                  onPressed: _saveDetectionLog,
+                ),
+                // Describe Scene (New feature - placeholder for now)
+                _ControlButton(
+                  icon: Icons.description,
+                  label: "Describe",
+                  color: Colors.purple,
+                  onPressed: () => _describeScene(),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Color _getConfidenceColor(int confidence) {
-    if (confidence >= 80) return Colors.green;
-    if (confidence >= 60) return Colors.yellow;
-    if (confidence >= 40) return Colors.orange;
-    return Colors.red;
-  }
+    ),
+  );
+}
 }
 
 class _ControlButton extends StatelessWidget {
@@ -404,5 +372,81 @@ class _ControlButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _DetectionTile extends StatelessWidget {
+  final String objectName;
+  final int confidence;
+
+  const _DetectionTile({
+    required this.objectName,
+    required this.confidence,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: _getConfidenceColor(confidence).withOpacity(0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Confidence bar
+          Container(
+            width: 50,
+            height: 6,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              color: Colors.grey[800],
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: confidence / 100,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: _getConfidenceColor(confidence),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Object name
+          Expanded(
+            child: Text(
+              objectName.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          // Percentage
+          Text(
+            "$confidence%",
+            style: TextStyle(
+              color: _getConfidenceColor(confidence),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getConfidenceColor(int confidence) {
+    if (confidence >= 80) return Colors.green;
+    if (confidence >= 60) return Colors.yellow;
+    if (confidence >= 40) return Colors.orange;
+    return Colors.red;
   }
 }
